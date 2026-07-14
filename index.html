@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -57,16 +56,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 </style>
 </head>
 <body>
-<div class="app-header"><h1>&#128197; BookingCal</h1><span class="badge">Shared Calendar v2.0</span></div>
+<div class="app-header"><h1>📅 BookingCal</h1><span class="badge">Shared Calendar v2.0</span></div>
 <div class="container">
-<div class="sbar">Total: <strong id="tot">0</strong>&nbsp;&nbsp;This Month: <strong id="mon">0</strong>&nbsp;&nbsp;Upcoming: <strong id="upc">0</strong><span class="sync-status" id="ss">&#9679; Synced</span></div>
+<div class="sbar">Total: <strong id="tot">0</strong>  This Month: <strong id="mon">0</strong>  Upcoming: <strong id="upc">0</strong><span class="sync-status" id="ss">● Synced</span></div>
 <div class="toolbar">
-<div class="nav-btns"><button id="bp">&#8592; Prev</button><button id="bt">Today</button><button id="bn">Next &#8594;</button></div>
+<div class="nav-btns"><button id="bp">← Prev</button><button id="bt">Today</button><button id="bn">Next →</button></div>
 <span class="month-title" id="mt"></span>
 <button class="add-btn" id="ba">+ New Event</button>
 </div>
 <div class="calendar"><div class="weekdays"><div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div></div><div class="days" id="cd"></div></div>
-<div class="elist"><h3>&#128203; Upcoming Events</h3><div id="ul"></div></div>
+<div class="elist"><h3>📋 Upcoming Events</h3><div id="ul"></div></div>
 </div>
 <div class="modal-overlay" id="mo">
 <div class="modal">
@@ -97,64 +96,56 @@ function pad(n){return n<10?"0"+n:""+n;}
 function setStatus(t,saving){var s=document.getElementById("ss");s.textContent=t;s.className="sync-status"+(saving?" saving":"");}
 
 async function loadBin(){
-  setStatus("Loading...",true);
-  var stored=localStorage.getItem("bcal_bin_id");
-  if(stored){
-    BIN_ID=stored;
-    try{
-      var r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:{"X-Master-Key":API_KEY}});
-      var d=await r.json();
-      if(d.record&&d.record.events){evts=d.record.events;render();setStatus("\u25cf Synced",false);return;}
-    }catch(e){}
-  }
-  var r2=await fetch("https://api.jsonbin.io/v3/b",{method:"POST",headers:{"Content-Type":"application/json","X-Master-Key":API_KEY,"X-Bin-Name":"bookingcal"},body:JSON.stringify({events:[]})});
-  var d2=await r2.json();
-  BIN_ID=d2.metadata.id;
-  localStorage.setItem("bcal_bin_id",BIN_ID);
-  evts=[];render();setStatus("\u25cf Synced",false);
+setStatus("Loading...",true);
+try{
+var r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:{"X-Master-Key":API_KEY}});
+var d=await r.json();
+if(d.record&&d.record.events){evts=d.record.events;render();setStatus("\u25cf Synced",false);return;}
+}catch(e){}
+evts=[];render();setStatus("\u25cf Synced",false);
 }
 
 async function saveBin(){
-  if(!BIN_ID)return;
-  setStatus("Saving...",true);
-  await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID,{method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":API_KEY},body:JSON.stringify({events:evts})});
-  setStatus("\u25cf Synced",false);
+if(!BIN_ID)return;
+setStatus("Saving...",true);
+await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID,{method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":API_KEY},body:JSON.stringify({events:evts})});
+setStatus("\u25cf Synced",false);
 }
 
 async function refreshData(){
-  if(!BIN_ID)return;
-  try{
-    var r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:{"X-Master-Key":API_KEY}});
-    var d=await r.json();
-    if(d.record&&d.record.events){evts=d.record.events;render();}
-  }catch(e){}
+if(!BIN_ID)return;
+try{
+var r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:{"X-Master-Key":API_KEY}});
+var d=await r.json();
+if(d.record&&d.record.events){evts=d.record.events;render();}
+}catch(e){}
 }
 
 function render(){
-  var y=cur.getFullYear(),m=cur.getMonth();
-  document.getElementById("mt").textContent=MS[m]+" "+y;
-  var sd=new Date(y,m,1).getDay(),td=new Date(y,m+1,0).getDate(),pl=new Date(y,m,0).getDate();
-  var h="";
-  for(var i=sd-1;i>=0;i--) h+='<div class="day other-month"><span class="day-num">'+(pl-i)+"</span></div>";
-  for(var d=1;d<=td;d++){
-    var ds=y+"-"+pad(m+1)+"-"+pad(d);
-    var now=new Date();
-    var it=d===now.getDate()&&m===now.getMonth()&&y===now.getFullYear();
-    var de=evts.filter(function(e){return e.date===ds;});
-    var eh=de.slice(0,3).map(function(e){return '<div class="ev '+e.color+'" data-id="'+e.id+'">'+((e.time?e.time+" ":"")+e.title)+"</div>";}).join("");
-    if(de.length>3) eh+='<div style="font-size:10px;color:#888">+'+(de.length-3)+" more</div>";
-    h+='<div class="day'+(it?" today":"")+'" data-date="'+ds+'"><span class="day-num">'+d+"</span>"+eh+"</div>";
-  }
-  for(var i=1;i<=42-sd-td;i++) h+='<div class="day other-month"><span class="day-num">'+i+"</span></div>";
-  document.getElementById("cd").innerHTML=h;
-  var now2=new Date(),m2=cur.getMonth(),y2=cur.getFullYear();
-  document.getElementById("tot").textContent=evts.length;
-  document.getElementById("mon").textContent=evts.filter(function(e){var d=new Date(e.date);return d.getMonth()===m2&&d.getFullYear()===y2;}).length;
-  document.getElementById("upc").textContent=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now2;}).length;
-  var up=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now2;}).sort(function(a,b){return new Date(a.date+"T"+(a.time||"00:00"))-new Date(b.date+"T"+(b.time||"00:00"));}).slice(0,5);
-  var el=document.getElementById("ul");
-  if(!up.length){el.innerHTML='<p style="color:#888;font-size:14px">No upcoming events</p>';return;}
-  el.innerHTML=up.map(function(e){return '<div class="eitem" data-id="'+e.id+'"><div class="edot" style="background:'+CC[e.color]+'"></div><div class="einfo"><div class="t">'+e.title+'</div><div class="tm">'+e.date+" "+(e.time||"")+(e.endTime?" - "+e.endTime:"")+"</div></div></div>";}).join("");
+var y=cur.getFullYear(),m=cur.getMonth();
+document.getElementById("mt").textContent=MS[m]+" "+y;
+var sd=new Date(y,m,1).getDay(),td=new Date(y,m+1,0).getDate(),pl=new Date(y,m,0).getDate();
+var h="";
+for(var i=sd-1;i>=0;i--) h+='<div class="day other-month"><span class="day-num">'+(pl-i)+"</span></div>";
+for(var d=1;d<=td;d++){
+var ds=y+"-"+pad(m+1)+"-"+pad(d);
+var now=new Date();
+var it=d===now.getDate()&&m===now.getMonth()&&y===now.getFullYear();
+var de=evts.filter(function(e){return e.date===ds;});
+var eh=de.slice(0,3).map(function(e){return '<div class="ev '+e.color+'" data-id="'+e.id+'">'+((e.time?e.time+" ":"")+e.title)+"</div>";}).join("");
+if(de.length>3) eh+='<div style="font-size:10px;color:#888">+'+(de.length-3)+" more</div>";
+h+='<div class="day'+(it?" today":"")+'" data-date="'+ds+'"><span class="day-num">'+d+"</span>"+eh+"</div>";
+}
+for(var i=1;i<=42-sd-td;i++) h+='<div class="day other-month"><span class="day-num">'+i+"</span></div>";
+document.getElementById("cd").innerHTML=h;
+var now2=new Date(),m2=cur.getMonth(),y2=cur.getFullYear();
+document.getElementById("tot").textContent=evts.length;
+document.getElementById("mon").textContent=evts.filter(function(e){var d=new Date(e.date);return d.getMonth()===m2&&d.getFullYear()===y2;}).length;
+document.getElementById("upc").textContent=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now2;}).length;
+var up=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now2;}).sort(function(a,b){return new Date(a.date+"T"+(a.time||"00:00"))-new Date(b.date+"T"+(b.time||"00:00"));}).slice(0,5);
+var el=document.getElementById("ul");
+if(!up.length){el.innerHTML='<p style="color:#888;font-size:14px">No upcoming events</p>';return;}
+el.innerHTML=up.map(function(e){return '<div class="eitem" data-id="'+e.id+'"><div class="edot" style="background:'+CC[e.color]+'"></div><div class="einfo"><div class="t">'+e.title+'</div><div class="tm">'+e.date+" "+(e.time||"")+(e.endTime?" - "+e.endTime:"")+"</div></div></div>";}).join("");
 }
 
 function openM(ds){eid=null;document.getElementById("mh").textContent="New Event";document.getElementById("ft").value="";document.getElementById("fd").value=ds||new Date().toISOString().split("T")[0];document.getElementById("fs").value="";document.getElementById("fe").value="";document.getElementById("fx").value="";document.getElementById("bd").style.display="none";document.querySelectorAll(".co").forEach(function(c){c.classList.remove("sel");});document.querySelector('[data-c="blue"]').classList.add("sel");document.getElementById("mo").classList.add("active");}
@@ -172,22 +163,22 @@ document.getElementById("mo").addEventListener("click",function(e){if(e.target==
 document.querySelectorAll(".co").forEach(function(c){c.addEventListener("click",function(){document.querySelectorAll(".co").forEach(function(x){x.classList.remove("sel");});c.classList.add("sel");});});
 
 document.getElementById("bs").addEventListener("click",async function(){
-  var title=document.getElementById("ft").value.trim();
-  if(!title){alert("Please enter a title");return;}
-  var ev={id:eid||Date.now().toString(36)+Math.random().toString(36).slice(2,7),title:title,date:document.getElementById("fd").value,time:document.getElementById("fs").value,endTime:document.getElementById("fe").value,desc:document.getElementById("fx").value,color:document.querySelector(".co.sel").getAttribute("data-c")};
-  if(eid){evts=evts.map(function(e){return e.id===eid?ev:e;});}else{evts.push(ev);}
-  closeM();render();await saveBin();
+var title=document.getElementById("ft").value.trim();
+if(!title){alert("Please enter a title");return;}
+var ev={id:eid||Date.now().toString(36)+Math.random().toString(36).slice(2,7),title:title,date:document.getElementById("fd").value,time:document.getElementById("fs").value,endTime:document.getElementById("fe").value,desc:document.getElementById("fx").value,color:document.querySelector(".co.sel").getAttribute("data-c")};
+if(eid){evts=evts.map(function(e){return e.id===eid?ev:e;});}else{evts.push(ev);}
+closeM();render();await saveBin();
 });
 
 document.getElementById("bd").addEventListener("click",async function(){
-  if(!confirm("Delete this event?"))return;
-  evts=evts.filter(function(e){return e.id!==eid;});
-  closeM();render();await saveBin();
+if(!confirm("Delete this event?"))return;
+evts=evts.filter(function(e){return e.id!==eid;});
+closeM();render();await saveBin();
 });
 
 document.getElementById("cd").addEventListener("click",function(e){
-  var ev=e.target.closest(".ev");if(ev){editE(ev.getAttribute("data-id"));return;}
-  var day=e.target.closest(".day:not(.other-month)");if(day){openM(day.getAttribute("data-date"));}
+var ev=e.target.closest(".ev");if(ev){editE(ev.getAttribute("data-id"));return;}
+var day=e.target.closest(".day:not(.other-month)");if(day){openM(day.getAttribute("data-date"));}
 });
 document.getElementById("ul").addEventListener("click",function(e){var item=e.target.closest(".eitem");if(item)editE(item.getAttribute("data-id"));});
 
@@ -195,4 +186,4 @@ setInterval(refreshData,15000);
 loadBin();
 </script>
 </body>
-</html>
+</html>\n```
