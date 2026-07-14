@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>BookingCal</title>
+<title>BookingCal - Shared Calendar</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f4f6f9;min-height:100vh}
@@ -51,13 +51,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 .edot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .einfo .t{font-weight:500;font-size:14px}
 .einfo .tm{font-size:12px;color:#888}
-.sbar{background:#fff;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;gap:16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);font-size:13px;color:#555}
+.sbar{background:#fff;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;gap:16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);font-size:13px;color:#555;align-items:center}
+.sync-status{margin-left:auto;font-size:11px;padding:4px 10px;border-radius:12px;background:#e8f5e9;color:#2e7d32}
+.sync-status.saving{background:#fff3e0;color:#e65100}
 </style>
 </head>
 <body>
-<div class="app-header"><h1>&#128197; BookingCal</h1><span class="badge">Shopify Add-on v1.0</span></div>
+<div class="app-header"><h1>&#128197; BookingCal</h1><span class="badge">Shared Calendar v2.0</span></div>
 <div class="container">
-<div class="sbar">Total Events: <strong id="tot">0</strong>&nbsp;&nbsp;This Month: <strong id="mon">0</strong>&nbsp;&nbsp;Upcoming: <strong id="upc">0</strong></div>
+<div class="sbar">Total: <strong id="tot">0</strong>&nbsp;&nbsp;This Month: <strong id="mon">0</strong>&nbsp;&nbsp;Upcoming: <strong id="upc">0</strong><span class="sync-status" id="ss">&#9679; Synced</span></div>
 <div class="toolbar">
 <div class="nav-btns"><button id="bp">&#8592; Prev</button><button id="bt">Today</button><button id="bn">Next &#8594;</button></div>
 <span class="month-title" id="mt"></span>
@@ -86,19 +88,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;bac
 </div>
 </div>
 <script>
-var cur=new Date();
-var evts=JSON.parse(localStorage.getItem("bcal")||"[]");
-var eid=null;
+var API_KEY="$2a$10$2Tfn4eABmSmxnwLbFjgHa.UjEi651p7LJYwunifIm6tbMNYjmYAKG";
+var BIN_ID=null;
+var cur=new Date(),evts=[],eid=null;
 var MS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 var CC={blue:"#5c6ac4",green:"#50b83c",red:"#de3618",orange:"#f49342",purple:"#9c6ade"};
-
 function pad(n){return n<10?"0"+n:""+n;}
+function setStatus(t,saving){var s=document.getElementById("ss");s.textContent=t;s.className="sync-status"+(saving?" saving":"");}
+
+async function loadBin(){
+  setStatus("Loading...",true);
+  var stored=localStorage.getItem("bcal_bin_id");
+  if(stored){
+    BIN_ID=stored;
+    try{
+      var r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:{"X-Master-Key":API_KEY}});
+      var d=await r.json();
+      if(d.record&&d.record.events){evts=d.record.events;render();setStatus("\u25cf Synced",false);return;}
+    }catch(e){}
+  }
+  var r2=await fetch("https://api.jsonbin.io/v3/b",{method:"POST",headers:{"Content-Type":"application/json","X-Master-Key":API_KEY,"X-Bin-Name":"bookingcal"},body:JSON.stringify({events:[]})});
+  var d2=await r2.json();
+  BIN_ID=d2.metadata.id;
+  localStorage.setItem("bcal_bin_id",BIN_ID);
+  evts=[];render();setStatus("\u25cf Synced",false);
+}
+
+async function saveBin(){
+  if(!BIN_ID)return;
+  setStatus("Saving...",true);
+  await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID,{method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":API_KEY},body:JSON.stringify({events:evts})});
+  setStatus("\u25cf Synced",false);
+}
+
+async function refreshData(){
+  if(!BIN_ID)return;
+  try{
+    var r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:{"X-Master-Key":API_KEY}});
+    var d=await r.json();
+    if(d.record&&d.record.events){evts=d.record.events;render();}
+  }catch(e){}
+}
 
 function render(){
   var y=cur.getFullYear(),m=cur.getMonth();
   document.getElementById("mt").textContent=MS[m]+" "+y;
-  var f=new Date(y,m,1),sd=f.getDay(),td=new Date(y,m+1,0).getDate();
-  var pl=new Date(y,m,0).getDate();
+  var sd=new Date(y,m,1).getDay(),td=new Date(y,m+1,0).getDate(),pl=new Date(y,m,0).getDate();
   var h="";
   for(var i=sd-1;i>=0;i--) h+='<div class="day other-month"><span class="day-num">'+(pl-i)+"</span></div>";
   for(var d=1;d<=td;d++){
@@ -110,55 +145,21 @@ function render(){
     if(de.length>3) eh+='<div style="font-size:10px;color:#888">+'+(de.length-3)+" more</div>";
     h+='<div class="day'+(it?" today":"")+'" data-date="'+ds+'"><span class="day-num">'+d+"</span>"+eh+"</div>";
   }
-  var rem=42-sd-td;
-  for(var i=1;i<=rem;i++) h+='<div class="day other-month"><span class="day-num">'+i+"</span></div>";
+  for(var i=1;i<=42-sd-td;i++) h+='<div class="day other-month"><span class="day-num">'+i+"</span></div>";
   document.getElementById("cd").innerHTML=h;
-  stats();ulist();
-}
-
-function stats(){
-  var now=new Date(),m=cur.getMonth(),y=cur.getFullYear();
+  var now2=new Date(),m2=cur.getMonth(),y2=cur.getFullYear();
   document.getElementById("tot").textContent=evts.length;
-  document.getElementById("mon").textContent=evts.filter(function(e){var d=new Date(e.date);return d.getMonth()===m&&d.getFullYear()===y;}).length;
-  document.getElementById("upc").textContent=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now;}).length;
-}
-
-function ulist(){
-  var now=new Date();
-  var up=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now;}).sort(function(a,b){return new Date(a.date+"T"+(a.time||"00:00"))-new Date(b.date+"T"+(b.time||"00:00"));}).slice(0,5);
+  document.getElementById("mon").textContent=evts.filter(function(e){var d=new Date(e.date);return d.getMonth()===m2&&d.getFullYear()===y2;}).length;
+  document.getElementById("upc").textContent=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now2;}).length;
+  var up=evts.filter(function(e){return new Date(e.date+"T"+(e.time||"23:59"))>=now2;}).sort(function(a,b){return new Date(a.date+"T"+(a.time||"00:00"))-new Date(b.date+"T"+(b.time||"00:00"));}).slice(0,5);
   var el=document.getElementById("ul");
   if(!up.length){el.innerHTML='<p style="color:#888;font-size:14px">No upcoming events</p>';return;}
   el.innerHTML=up.map(function(e){return '<div class="eitem" data-id="'+e.id+'"><div class="edot" style="background:'+CC[e.color]+'"></div><div class="einfo"><div class="t">'+e.title+'</div><div class="tm">'+e.date+" "+(e.time||"")+(e.endTime?" - "+e.endTime:"")+"</div></div></div>";}).join("");
 }
 
-function openM(ds){
-  eid=null;
-  document.getElementById("mh").textContent="New Event";
-  document.getElementById("ft").value="";
-  document.getElementById("fd").value=ds||new Date().toISOString().split("T")[0];
-  document.getElementById("fs").value="";
-  document.getElementById("fe").value="";
-  document.getElementById("fx").value="";
-  document.getElementById("bd").style.display="none";
-  document.querySelectorAll(".co").forEach(function(c){c.classList.remove("sel");});
-  document.querySelector('[data-c="blue"]').classList.add("sel");
-  document.getElementById("mo").classList.add("active");
-}
+function openM(ds){eid=null;document.getElementById("mh").textContent="New Event";document.getElementById("ft").value="";document.getElementById("fd").value=ds||new Date().toISOString().split("T")[0];document.getElementById("fs").value="";document.getElementById("fe").value="";document.getElementById("fx").value="";document.getElementById("bd").style.display="none";document.querySelectorAll(".co").forEach(function(c){c.classList.remove("sel");});document.querySelector('[data-c="blue"]').classList.add("sel");document.getElementById("mo").classList.add("active");}
 
-function editE(id){
-  var e=evts.find(function(x){return x.id===id;});
-  if(!e)return;
-  eid=id;
-  document.getElementById("mh").textContent="Edit Event";
-  document.getElementById("ft").value=e.title;
-  document.getElementById("fd").value=e.date;
-  document.getElementById("fs").value=e.time||"";
-  document.getElementById("fe").value=e.endTime||"";
-  document.getElementById("fx").value=e.desc||"";
-  document.getElementById("bd").style.display="block";
-  document.querySelectorAll(".co").forEach(function(c){c.classList.toggle("sel",c.getAttribute("data-c")===e.color);});
-  document.getElementById("mo").classList.add("active");
-}
+function editE(id){var e=evts.find(function(x){return x.id===id;});if(!e)return;eid=id;document.getElementById("mh").textContent="Edit Event";document.getElementById("ft").value=e.title;document.getElementById("fd").value=e.date;document.getElementById("fs").value=e.time||"";document.getElementById("fe").value=e.endTime||"";document.getElementById("fx").value=e.desc||"";document.getElementById("bd").style.display="block";document.querySelectorAll(".co").forEach(function(c){c.classList.toggle("sel",c.getAttribute("data-c")===e.color);});document.getElementById("mo").classList.add("active");}
 
 function closeM(){document.getElementById("mo").classList.remove("active");}
 
@@ -168,53 +169,30 @@ document.getElementById("bt").addEventListener("click",function(){cur=new Date()
 document.getElementById("ba").addEventListener("click",function(){openM();});
 document.getElementById("bc").addEventListener("click",closeM);
 document.getElementById("mo").addEventListener("click",function(e){if(e.target===this)closeM();});
+document.querySelectorAll(".co").forEach(function(c){c.addEventListener("click",function(){document.querySelectorAll(".co").forEach(function(x){x.classList.remove("sel");});c.classList.add("sel");});});
 
-document.querySelectorAll(".co").forEach(function(c){
-  c.addEventListener("click",function(){
-    document.querySelectorAll(".co").forEach(function(x){x.classList.remove("sel");});
-    c.classList.add("sel");
-  });
-});
-
-document.getElementById("bs").addEventListener("click",function(){
+document.getElementById("bs").addEventListener("click",async function(){
   var title=document.getElementById("ft").value.trim();
   if(!title){alert("Please enter a title");return;}
   var ev={id:eid||Date.now().toString(36)+Math.random().toString(36).slice(2,7),title:title,date:document.getElementById("fd").value,time:document.getElementById("fs").value,endTime:document.getElementById("fe").value,desc:document.getElementById("fx").value,color:document.querySelector(".co.sel").getAttribute("data-c")};
   if(eid){evts=evts.map(function(e){return e.id===eid?ev:e;});}else{evts.push(ev);}
-  localStorage.setItem("bcal",JSON.stringify(evts));
-  closeM();render();
+  closeM();render();await saveBin();
 });
 
-document.getElementById("bd").addEventListener("click",function(){
+document.getElementById("bd").addEventListener("click",async function(){
   if(!confirm("Delete this event?"))return;
   evts=evts.filter(function(e){return e.id!==eid;});
-  localStorage.setItem("bcal",JSON.stringify(evts));
-  closeM();render();
+  closeM();render();await saveBin();
 });
 
 document.getElementById("cd").addEventListener("click",function(e){
-  var ev=e.target.closest(".ev");
-  if(ev){editE(ev.getAttribute("data-id"));return;}
-  var day=e.target.closest(".day:not(.other-month)");
-  if(day){openM(day.getAttribute("data-date"));}
+  var ev=e.target.closest(".ev");if(ev){editE(ev.getAttribute("data-id"));return;}
+  var day=e.target.closest(".day:not(.other-month)");if(day){openM(day.getAttribute("data-date"));}
 });
+document.getElementById("ul").addEventListener("click",function(e){var item=e.target.closest(".eitem");if(item)editE(item.getAttribute("data-id"));});
 
-document.getElementById("ul").addEventListener("click",function(e){
-  var item=e.target.closest(".eitem");
-  if(item) editE(item.getAttribute("data-id"));
-});
-
-if(!evts.length){
-  var t=new Date(),y=t.getFullYear(),m=t.getMonth(),d=t.getDate();
-  evts=[
-    {id:"s1",title:"Team Standup",date:y+"-"+pad(m+1)+"-"+pad(d),time:"09:00",endTime:"09:30",desc:"Daily sync",color:"blue"},
-    {id:"s2",title:"Client Call",date:y+"-"+pad(m+1)+"-"+pad(Math.min(d+1,28)),time:"14:00",endTime:"15:00",desc:"Project discussion",color:"green"},
-    {id:"s3",title:"Product Launch",date:y+"-"+pad(m+1)+"-"+pad(Math.min(d+3,28)),time:"10:00",endTime:"12:00",desc:"Feature release",color:"red"},
-    {id:"s4",title:"Workshop",date:y+"-"+pad(m+1)+"-"+pad(Math.min(d+5,28)),time:"13:00",endTime:"16:00",desc:"Training session",color:"purple"}
-  ];
-  localStorage.setItem("bcal",JSON.stringify(evts));
-}
-render();
+setInterval(refreshData,15000);
+loadBin();
 </script>
 </body>
 </html>
